@@ -13,19 +13,19 @@ Anyone can deposit ETH into the contract, but only the owner (the deployer) can 
 ## How to Use
 
 1. Deploy the contract
-- Use Remix IDE.
-- Select Solidity compiler ```^0.8.0```.
-- Deploy the contract on a testnet (e.g. Sepolia or Holesky) using MetaTask.
+	- Use Remix IDE.
+	- Select Solidity compiler ```^0.8.0```.
+	- Deploy the contract on a testnet (e.g. Sepolia or Holesky) using MetaTask.
 
 2. Deposit ETH
-- Send ETH directly to the contract address, or use the **"Transact"** button in Remix.
+	- Send ETH directly to the contract address, or use the **"Transact"** button in Remix.
 
 3. Withdraw ETH
-- Call the ```withdraw()``` function.
-- Only the owner (deployer address) can withdraw.
+	- Call the ```withdraw()``` function.
+	- Only the owner (deployer address) can withdraw.
 
 4. Check balance
-- Call ```getBalance()``` to see how much ETH is stored.
+	- Call ```getBalance()``` to see how much ETH is stored.
 
 ## Example Workflow
 
