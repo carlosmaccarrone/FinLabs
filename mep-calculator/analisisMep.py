@@ -1,33 +1,3 @@
-"""
-MEP Analyzer for AL30/AL30D Bonds
----------------------------------
-This script calculates and visualizes the MEP (Mercado Electrónico de Pagos)
-exchange rate using AL30 (ARS) and AL30D (USD) bond price data.
-
-Features:
-- Calculates MEP from AL30 and AL30D prices.
-- Plots:
-	* Historical MEP value.
-	* Daily traded volume.
-	* Market pressure (buy(c)/sell(v) dominance).
-	* "Sweet spot" zones for optimal buy/sell opportunities.
-- RSI-style visualization for intuitive market timing.
-- Uses pandas for data processing, scipy to detect sweet spots 
-  and matplotlib for visualization.
-- Built as an educational, clean example of financial data analysis
-  and plotting with Python.
-
-Requirements:
-	pandas, scipy, matplotlib
-
-Usage:
-	• In Windows: run from desktop the `analisisMep.bat` file.
-	• In Linux/macOS: run from terminal `python analisisMep.py`.
-
-Author: Carlos Maccarrone
-Date: 2025-08-15
-"""
-
 import matplotlib.pyplot as plt
 from scipy.stats import zscore
 import pandas as pd
