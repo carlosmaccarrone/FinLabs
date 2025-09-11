@@ -55,7 +55,7 @@ MEP = PRICE_AL30 / PRICE_AL30D
 
 ## Author
 
-Carlos Maccarrone
+Carlos Maccarrone  
 Date: 2025-08-15
 
 ---
