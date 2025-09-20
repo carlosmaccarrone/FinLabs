@@ -1,6 +1,9 @@
+##### C:\Users\carlos.e.maccarrone\Desktop\Tareas Teco\portfolio\scripts
+
 import matplotlib.pyplot as plt
 from scipy.stats import zscore
 import pandas as pd
+import numpy as np
 
 df = pd.read_excel("dolarMep.xlsx")
 # print(df.head())
@@ -66,6 +69,9 @@ merged["INTERVENIDO"] = ((merged["ZVOL AL30"] > 1.0) & (merged["DELTA PRECIO AL3
 window = 50
 subset = merged.tail(window)
 
+sweet_spots_compra_subset = sweet_spots_compra[sweet_spots_compra["FECHA"].isin(subset["FECHA"])]
+sweet_spots_venta_subset = sweet_spots_venta[sweet_spots_venta["FECHA"].isin(subset["FECHA"])]
+
 fig, ax1 = plt.subplots(figsize=(12, 6))
 
 # Eje principal: MEP y sus zcores
@@ -79,8 +85,8 @@ ax1.axhline(media - std, color="red", linestyle="--", label="-1o")
 ax1.axhline(media, color="gray", linestyle="--", label="Media")
 
 # Puntos de sweet spots
-ax1.scatter(sweet_spots_compra["FECHA"], sweet_spots_compra["DOLAR MEP"], color="red", label="Sweet Spot Compra", zorder=5)
-ax1.scatter(sweet_spots_venta["FECHA"], sweet_spots_venta["DOLAR MEP"], color="red", label="Sweet Spot Venta", zorder=5)
+ax1.scatter(sweet_spots_compra_subset["FECHA"], sweet_spots_compra_subset["DOLAR MEP"], color="red", label="Sweet Spot Compra", zorder=5)
+ax1.scatter(sweet_spots_venta_subset["FECHA"], sweet_spots_venta_subset["DOLAR MEP"], color="red", label="Sweet Spot Venta", zorder=5)
 
 ax1.set_ylabel("Dólar MEP")
 ax1.set_xlabel("Fecha")
