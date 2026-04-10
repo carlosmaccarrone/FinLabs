@@ -6,7 +6,7 @@ This Python script builds and analyzes the USD futures curve using contracts dat
 
 ## Features
 
-- Extracts and cleans futures data directly from broker Excel files.  
+- Extracts and cleans futures data directly from Matba-Rofex Excel files.  
 - Automatically detects spot FX (Dólar UST ART 000).  
 - Calculates:  
   - TTM (Time to Maturity) in years.  
@@ -39,7 +39,7 @@ pip install pandas numpy matplotlib scipy openpyxl
 
 ## Usage
 
-Run the script and provide the Excel file exported from Matba-Rofex:
+Run the script and provide the Excel file exported from Matba-Rofex:  
 E.G.: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA3Mercados%E2%80%93Monedas09042026.xlsx
 
 Then input:
