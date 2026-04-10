@@ -147,6 +147,6 @@ plt.xlabel("Tiempo a vencimiento (años)")
 plt.ylabel("TEA (%)")
 plt.title("Curva futuros dólar (suavizada)")
 
-plt.grid()
+# plt.grid()
 plt.show()
 # =================================================
