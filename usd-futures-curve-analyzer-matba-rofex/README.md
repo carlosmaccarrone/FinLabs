@@ -51,7 +51,7 @@ Ingrese nombre archivo con extension: cierre.xlsx
 ## Analysis Details
 
 1. Time to Maturity (TTM)  
-Computed as the fraction of time between current market time and contract maturity:  
+Computed as the fraction of time between market closing time (15:00) and contract maturity at 15:00:  
 ```bash
 TTM = (maturity - now) / 365
 ```
