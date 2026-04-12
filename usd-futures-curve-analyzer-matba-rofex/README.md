@@ -23,14 +23,13 @@ It then compares both to detect mispricing, relative value opportunities, and li
   - **Nelson–Siegel model (structural term structure)**  
 - Computes:
   - Fair value curve  
-  - Mispricing vs both curves  
-  - Edge in ARS and ticks  
+  - Mispricing (NS)  
+  - LONG / SHORT based on relative mispricing  
+  - Ranking of candidates which could reverse direction  
 - Liquidity modeling:  
   - Log-scaled volume  
   - Normalized liquidity score  
   - Filtering of illiquid contracts  
-- Generates trading signals:  
-  - LONG / SHORT based on relative mispricing
 - Visualization:  
   - TEA vs TTM scatter plot.  
   - Smoothed curve overlay.  
@@ -64,7 +63,7 @@ Example file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA
 1\. Time to Maturity (TTM)  
 
 All contracts are aligned to market close (15:00):  
-```bash
+```
 TTM = (maturity - market_close) / 365
 ```
 
@@ -73,14 +72,14 @@ Where:
   - Maturity is also normalized to 15:00  
 
 2\. TEA Calculation  
-```bash
+```
 TEA = (Future Price / Spot)^(1 / TTM) - 1
 ```
 Represents the implied annualized rate embedded in each futures contract.  
 
 3\. Weighted Spline Curve (Market Curve)  
 - The market curve is constructed using:  
-```bash
+```
 y = log(Future / Spot)
 ```
 - Weighted smoothing spline:  
@@ -103,28 +102,27 @@ Optimized via nonlinear least squares:
 This provides a **smooth macro-consistent curve**.  
 
 5\. Fair Value Construction  
-```bash
+```
 Fair Price = Spot * exp(curve_value)
 ```
 
 Computed from Nelson–Siegel fitted curve.  
 
-6\. Mispricing & Edge  
+6\. Mispricing & Difference  
 - Two sources of deviation:  
   - Spline vs Nelson-Siegel  
   - Market price vs theoretical curve  
 
 - Key metrics:  
-  - `Edge_pts = Spline Price - Fair Price`  
   - `Mispricing = log(F/S) - NS_curve`  
-  - `Desvio ticks = Edge_pts / tick_size`  
+  - `Difference = Spline Price - Fair Price`  
 
 - Used to detect **relative value opportunities**.
 
 7\. Liquidity Filter  
 
 Liquidity is defined as:  
-```bash
+```
 Liquidity = log(1 + Volume) normalized
 ```
 
@@ -135,7 +133,7 @@ Then:
 8\. Trading Signal  
   
 Directional signal:  
-```bash
+```
 signal = spline_curve - nelson_siegel_curve
 ```
 
@@ -153,7 +151,7 @@ Interpretation:
 - Ranked liquidity view:  
   - Fair Price  
   - Direction (LONG / SHORT)  
-  - Edge in ARS and ticks  
+  - Candidates ranking which could reverse direction.  
 
 ## Visualization
 
