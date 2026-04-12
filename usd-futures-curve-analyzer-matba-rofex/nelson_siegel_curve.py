@@ -37,23 +37,19 @@ def parse_number(x):
 
 # Precio (Ajuste)
 df["Ajuste"] = df["Ajuste"].apply(parse_number)
-
-# Fecha
+# Maturity
 df["Último Día Neg."] = pd.to_datetime(df["Último Día Neg."], dayfirst=True)
 # ================== SPOT ==================
 df_raw = pd.read_excel(file_path, header=None)
-
 spot = None
 
-for i in range(31, 37):  # filas 32 a 36 inclusive
+for i in range(31, 37):
     if str(df_raw.iloc[i, 0]).strip() == "Dólar UST ART 000":
         spot = parse_number(df_raw.iloc[i, 2])
         break
 
 if spot is None:
     raise ValueError("No se encontró el spot 'Dólar UST ART 000' en las filas esperadas")
-
-print("\nSPOT: AR$ {}\n".format(spot))
 # ================== CALCULATE CURVE ==================
 ttm_list = []
 tea_list = []
@@ -69,24 +65,18 @@ for _, row in df.iterrows():
     tea_list.append(tea_value * 100)
 # ================== INPUT ==================
 df["TTM (years)"] = ttm_list
-
 df["TEA (%)"] = tea_list
 df["TEM (%)"] = ((1 + df["TEA (%)"]/100) ** (1/12) - 1) * 100
 df["ΔTEM"] = df["TEM (%)"].diff()
-
 df["Vol."] = df["Vol."].astype(float)
-
 x = df["TTM (years)"].values
 y = np.log(df["Ajuste"].values / spot)
 # ================== SPLINE (market curve) ==================
 weights = np.sqrt(df["Vol."].values)
 weights = weights / np.mean(weights)
 weights = np.clip(weights, 0.6, 1.5)
-
 spline = UnivariateSpline(x, y, w=weights, s=0.0001)
-
 y_spline = spline(x)
-
 df["Spline Price"] = spot * np.exp(y_spline)
 # ================== NELSON-SIEGEL (structural curve) ==================
 def ns_model(theta, x):
@@ -138,6 +128,7 @@ print("\n=== RESULTS ===\n")
 print(df[["Posición", "Ajuste", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "Mispricing"]])
 print("\n=== FROM MORE LIQUIDS TO LESS LIQUIDS ===")
 print(df_sorted[["Posición", "Ajuste", "Fair Price", "Direction", "Desvio ticks", "Edge_pts", "Liquidity"]])
+print("\nSPOT: AR$ {}".format(spot))
 # ================== PLOT ==================
 plt.figure()
 
