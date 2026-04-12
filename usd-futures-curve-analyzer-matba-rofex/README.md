@@ -92,7 +92,7 @@ This produces a **liquidity-adjusted market curve**.
 4\. Nelson–Siegel Curve (Structural Model)  
   
 The structural term structure is modeled as:  
-```bash
+```
 y(x) = β₀ + β₁ * ((1 - e^{-λx}) / λx) + β₂ * (((1 - e^{-λx}) / λx) - e^{-λx})
 ```
 
