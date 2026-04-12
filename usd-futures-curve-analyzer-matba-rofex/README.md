@@ -122,6 +122,7 @@ Computed from Nelson–Siegel fitted curve.
 - Used to detect **relative value opportunities**.
 
 7\. Liquidity Filter  
+
 Liquidity is defined as:  
 ```bash
 Liquidity = log(1 + Volume) normalized
@@ -132,6 +133,7 @@ Then:
   - Ranking is done by liquidity strength  
 
 8\. Trading Signal  
+  
 Directional signal:  
 ```bash
 signal = spline_curve - nelson_siegel_curve
