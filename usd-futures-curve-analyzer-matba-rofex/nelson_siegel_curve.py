@@ -89,7 +89,6 @@ y_spline = spline(x)
 
 df["Spline Price"] = spot * np.exp(y_spline)
 # ================== NELSON-SIEGEL (structural curve) ==================
-
 def ns_model(theta, x):
     beta0, beta1, beta2, lam = theta
 
@@ -133,7 +132,6 @@ df["Liquidity"] = liq
 # ================== FILTER ==================
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
-
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
