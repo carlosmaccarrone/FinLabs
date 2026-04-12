@@ -107,10 +107,8 @@ y_curve = ns_model(theta, x)
 tea_curve = (np.exp(y_curve) ** (1 / x) - 1) * 100
 df["TEA Curve (%)"] = tea_curve
 # ================== EDGE ==================
-df["Fair Price"] = spot * np.exp(y_curve)
-df["Edge_pts"] = df["Spline Price"] - df["Fair Price"]
-tick_size = 0.5
-df["Desvio ticks"] = df["Edge_pts"] / tick_size
+df["Fair Price (NS)"] = spot * np.exp(y_curve)
+df["Difference "] = df["Spline Price"] - df["Fair Price (NS)"]
 df["Mispricing"] = y - y_ns
 signal = y_spline - y_ns
 df["Direction"] = np.where(signal > 0, "LONG", "SHORT")
@@ -127,7 +125,8 @@ df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
 print("\n=== RESULTS ===\n")
 print(df[["Posición", "Ajuste", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "Mispricing"]])
 print("\n=== FROM MORE LIQUIDS TO LESS LIQUIDS ===")
-print(df_sorted[["Posición", "Ajuste", "Fair Price", "Direction", "Desvio ticks", "Edge_pts", "Liquidity"]])
+print(df_sorted[["Posición", "Ajuste", "Spline Price", "Fair Price (NS)", "Difference ", "Direction", "Liquidity"]])
+print("\nDifference es el ranking de candidatos para revertir su Direction")
 print("\nSPOT: AR$ {}".format(spot))
 # ================== PLOT ==================
 plt.figure()
