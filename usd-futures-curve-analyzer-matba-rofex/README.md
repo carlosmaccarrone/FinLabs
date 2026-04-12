@@ -1,6 +1,11 @@
-# USD Futures Curve Analyzer (MATBA-ROFEX)
+# USD Futures Curve Analyzer (Spline + Nelson-Siegel Hybrid Model)
 
-This Python script builds and analyzes the USD futures curve using contracts data (e.g. DLR) and spot FX.
+This Python script builds and analyzes the USD futures curve using MATBA-ROFEX contract data and spot FX, combining two curve-fitting approaches:
+
+A weighted spline (market-driven curve)
+A Nelson–Siegel model (structural curve)
+
+It then compares both to detect mispricing, relative value opportunities, and liquidity-adjusted signals.
 
 ---
 
@@ -12,22 +17,24 @@ This Python script builds and analyzes the USD futures curve using contracts dat
   - TTM (Time to Maturity) in years.  
   - TEA (Tasa Efectiva Anual).  
   - TEM (Tasa Efectiva Mensual).  
-  - ΔTEM (slope between contracts).  
-- Fits a smooth futures curve using weighted splines:  
-  - Weights based on traded volume.  
+  - ΔTEM (curve slope dynamics).  
+- Builds two independent curve models:  
+  - **Weighted Univariate Spline (market curve)**  
+  - **Nelson–Siegel model (structural term structure)**  
 - Computes:
-  - Theoretical curve (fair value).  
-  - Mispricing (%) vs curve.
-  - Mispricing in ARS.
+  - Fair value curve  
+  - Mispricing vs both curves  
+  - Edge in ARS and ticks  
+- Liquidity modeling:  
+  - Log-scaled volume  
+  - Normalized liquidity score  
+  - Filtering of illiquid contracts  
+- Generates trading signals:  
+  - LONG / SHORT based on relative mispricing
 - Visualization:  
   - TEA vs TTM scatter plot.  
-  - Smoothed curve (yellow line).  
-  - Contracts labeled with ticker + TEA.  
-- Uses:
-  - `pandas` & `openpyxl` for data processing.  
-  - `scipy` to calculate spline curve.  
-  - `matplotlib` for visualization.  
-- Built as an **educational, clean example** of financial data analysis and plotting in Python.
+  - Smoothed curve overlay.  
+  - Contract labeling with ticker and rates.  
 
 ---
 
@@ -37,59 +44,120 @@ This Python script builds and analyzes the USD futures curve using contracts dat
 pip install pandas numpy matplotlib scipy openpyxl
 ```
 
+---
+
 ## Usage
 
-Run the script and provide the Excel file exported from Matba-Rofex:  
-E.G.: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA3Mercados%E2%80%93Monedas09042026.xlsx
-
-Then input:
-
+Run the script and provide a Matba-Rofex Excel file: 
 ```bash
-Ingrese nombre archivo con extension: cierre.xlsx
+Ingrese nombre archivo con extension: close.xlsx
 ```
 
-## Analysis Details
+Example file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA3Mercados%E2%80%93Monedas10042026.xlsx
+
+(Rename: CierreParcialA3Mercados%E2%80%93Monedas10042026.xlsx to close.xlsx)  
+
+---
+
+## Methodology
 
 1. Time to Maturity (TTM)  
-Computed as the fraction of time between market closing time (15:00) and contract maturity at 15:00:  
+All contracts are aligned to market close (15:00):   
 ```bash
-TTM = (maturity - now) / 365
+TTM = (maturity - market_close) / 365
 ```
+
+Where:  
+  - Market close is fixed at 15:00  
+  - Maturity is also normalized to 15:00  
 
 2. TEA Calculation  
 ```bash
 TEA = (Future Price / Spot)^(1 / TTM) - 1
 ```
-Represents the implied annualized rate of the futures contract.  
+Represents the implied annualized rate embedded in each futures contract.  
 
-3. Curve Construction  
-- Uses log transformation:  
+3. Weighted Spline Curve (Market Curve) 
+- The market curve is constructed using:  
 ```bash
 y = log(Future / Spot)
 ```
-- Fits a Univariate Spline:  
-  - Weighted by √volume (more liquidity → more influence).  
-  - Smoothness controlled via parameter s.  
+- Weighted smoothing spline:  
+  - Weights = √(Volume)  
+  - Clipped to reduce outliers impact  
 
-4. Fair Value  
-The theoretical price is reconstructed from the curve:  
+This produces a **liquidity-adjusted market curve**.
+
+4. Nelson–Siegel Curve (Structural Model)  
+The structural term structure is modeled as:  
+```bash
+y(x) = β₀ + β₁ * ((1 - e^{-λx}) / λx) + β₂ * (((1 - e^{-λx}) / λx) - e^{-λx})
+```
+
+Optimized via nonlinear least squares:  
+  - Minimizes squared error vs observed log-prices  
+  - Includes level shift adjustment for calibration  
+
+This provides a **smooth macro-consistent curve**.  
+
+5. Fair Value Construction  
 ```bash
 Fair Price = Spot * exp(curve_value)
 ```
 
-5. Mispricing  
-```bash
-Mispricing (%) = TEA_real - TEA_curve
-Mispricing ($) = Market Price - Fair Price
-```
-Used to detect relative value opportunities across contracts.  
+Computed from Nelson–Siegel fitted curve.  
 
-6. Filtering by Liquidity  
-Contracts with low volume are filtered out (e.g. Vol > 9000) for ranking:  
+6. Mispricing & Edge  
+Two sources of deviation:  
+  - Spline vs Nelson-Siegel  
+  - Market price vs theoretical curve  
+Key metrics:  
 ```bash
-Top: most expensive vs curve  
-Bottom: cheapest vs curve
+Edge_pts = Spline Price - Fair Price
+Mispricing = log(F/S) - NS_curve
+Desvio ticks = Edge_pts / tick_size
 ```
+
+Used to detect **relative value opportunities**.
+
+7. Liquidity Filter
+Liquidity is defined as:  
+```bash
+Liquidity = log(1 + Volume) normalized
+```
+
+Then:  
+  - Contracts with low liquidity are filtered out  
+  - Ranking is done by liquidity strength  
+
+8. Trading Signal
+Directional signal:  
+```bash
+signal = spline_curve - nelson_siegel_curve
+```
+
+Interpretation:  
+  - LONG → market above structural curve  
+  - SHORT → market below structural curve  
+
+---
+
+## Outputs
+
+**Console Output**  
+- Full contract table:  
+  - TEA, TEM, ΔTEM, Mispricing  
+- Ranked liquidity view:  
+  - Fair Price  
+  - Direction (LONG / SHORT)  
+  - Edge in ARS and ticks  
+
+## Visualization
+
+- TEA (%) vs TTM (years)  
+- Market scatter points (red/green by mispricing)  
+- Smoothed Nelson–Siegel curve (yellow)  
+- Contract annotations  
 
 ---
 
@@ -101,12 +169,12 @@ Date: 2026-04-08
 ---
 
 ## Notes
-- Designed for futures curve analysis in ARS/USD markets.  
--  Useful for:  
-  - Relative value trading.  
-  - Detecting distortions in the curve.  
-  - Understanding term structure dynamics.  
-- Educational example of:  
-  - Financial modeling  
-  - Curve fitting  
-  - Data visualization in Python  
+- Designed for **USD futures curve analysis in Argentina (MATBA-ROFEX)**.  
+- Combines:  
+  - Market-driven interpolation (spline)  
+  - Structural macro model (Nelson–Siegel)   
+- Useful for:  
+  - Relative value trading  
+  - Curve arbitrage  
+  - Term structure analysis  
+- Built as a **hybrid quantitative research tool** for FX futures pricing.
