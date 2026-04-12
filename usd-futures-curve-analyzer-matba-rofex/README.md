@@ -62,7 +62,8 @@ Example file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA
 ## Methodology
 
 1\. Time to Maturity (TTM)  
-All contracts are aligned to market close (15:00):   
+
+All contracts are aligned to market close (15:00):  
 ```bash
 TTM = (maturity - market_close) / 365
 ```
@@ -77,7 +78,7 @@ TEA = (Future Price / Spot)^(1 / TTM) - 1
 ```
 Represents the implied annualized rate embedded in each futures contract.  
 
-3\. Weighted Spline Curve (Market Curve) 
+3\. Weighted Spline Curve (Market Curve)  
 - The market curve is constructed using:  
 ```bash
 y = log(Future / Spot)
@@ -89,6 +90,7 @@ y = log(Future / Spot)
 This produces a **liquidity-adjusted market curve**.
 
 4\. Nelson–Siegel Curve (Structural Model)  
+  
 The structural term structure is modeled as:  
 ```bash
 y(x) = β₀ + β₁ * ((1 - e^{-λx}) / λx) + β₂ * (((1 - e^{-λx}) / λx) - e^{-λx})
@@ -108,19 +110,18 @@ Fair Price = Spot * exp(curve_value)
 Computed from Nelson–Siegel fitted curve.  
 
 6\. Mispricing & Edge  
-Two sources of deviation:  
+- Two sources of deviation:  
   - Spline vs Nelson-Siegel  
   - Market price vs theoretical curve  
-Key metrics:  
-```bash
-Edge_pts = Spline Price - Fair Price
-Mispricing = log(F/S) - NS_curve
-Desvio ticks = Edge_pts / tick_size
-```
 
-Used to detect **relative value opportunities**.
+- Key metrics:  
+  - `Edge_pts = Spline Price - Fair Price`  
+  - `Mispricing = log(F/S) - NS_curve`  
+  - `Desvio ticks = Edge_pts / tick_size`  
 
-7\. Liquidity Filter
+- Used to detect **relative value opportunities**.
+
+7\. Liquidity Filter  
 Liquidity is defined as:  
 ```bash
 Liquidity = log(1 + Volume) normalized
@@ -130,7 +131,7 @@ Then:
   - Contracts with low liquidity are filtered out  
   - Ranking is done by liquidity strength  
 
-8\. Trading Signal
+8\. Trading Signal  
 Directional signal:  
 ```bash
 signal = spline_curve - nelson_siegel_curve
