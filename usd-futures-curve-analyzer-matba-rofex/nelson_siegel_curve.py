@@ -6,19 +6,25 @@ import numpy as np
 import pandas as pd
 
 # ================== TIME FUNCTIONS ==================
-def market_now():
-    now = datetime.now()
-    return datetime.combine(now.date(), time(15, 0))
+def market_now(close_date):
+    return datetime.combine(close_date.date(), time(15, 0))
 
 def market_maturity(maturity_date):
     return datetime.combine(maturity_date, time(15, 0))
 
 def year_fraction(now, maturity):
     delta = maturity - now
-    return delta.total_seconds() / (365 * 24 * 60 * 60)
+    total_days = delta.total_seconds() / (24 * 60 * 60)
+    # weekends counting
+    dates = pd.date_range(start=now.date(), end=maturity.date(), freq="D")[1:]
+    weekend_days = np.sum(dates.weekday >= 5)  # 5=saturday, 6=sunday
+    # weekends substraction
+    effective_days = total_days - weekend_days
+    effective_days = max(effective_days, 0.0001) # guardrail    
+    return effective_days / 252
 
-def tea(price, spot, maturity_date):
-    now_mkt = market_now()
+def tea(price, spot, maturity_date, close_date):
+    now_mkt = market_now(close_date)
     maturity = market_maturity(maturity_date)
     ttm_years = year_fraction(now_mkt, maturity)
     return (price / spot) ** (1 / ttm_years) - 1, ttm_years
@@ -46,6 +52,7 @@ spot = None
 for i in range(31, 37):
     if str(df_raw.iloc[i, 0]).strip() == "Dólar UST ART 000":
         spot = parse_number(df_raw.iloc[i, 2])
+        close_date = pd.to_datetime(df_raw.iloc[i, 1], dayfirst=True)
         break
 
 if spot is None:
@@ -59,7 +66,7 @@ for _, row in df.iterrows():
     maturity_date = row["Último Día Neg."]
     
     ttm, ttm_years = None, None
-    tea_value, ttm_years = tea(price, spot, maturity_date)
+    tea_value, ttm_years = tea(price, spot, maturity_date, close_date)
     
     ttm_list.append(ttm_years)
     tea_list.append(tea_value * 100)
@@ -110,8 +117,9 @@ df["TEA Curve (%)"] = tea_curve
 df["Fair Price (NS)"] = spot * np.exp(y_curve)
 df["Difference "] = df["Spline Price"] - df["Fair Price (NS)"]
 df["Mispricing"] = y - y_ns
+df["Mispricing $"] = np.where(df["Mispricing"] > 0, "CARO", "BARATO")
 signal = y_spline - y_ns
-df["Direction"] = np.where(signal > 0, "LONG", "SHORT")
+df["Momentum"] = np.where(signal > 0, "LONG", "SHORT")
 # ================== LIQUIDITY ==================
 vol = df["Vol."].values
 liq = np.log1p(vol)
@@ -120,13 +128,14 @@ df["Liquidity"] = liq
 # ================== FILTER ==================
 df_filtered = df.copy()
 df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
+df_filtered["O.I."] = df_filtered["I. A.*"]
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
-print(df[["Posición", "Ajuste", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "Mispricing"]])
+print(df[["Posición", "Ajuste", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "Mispricing", "Mispricing $"]])
 print("\n=== FROM MORE LIQUIDS TO LESS LIQUIDS ===")
-print(df_sorted[["Posición", "Ajuste", "Spline Price", "Fair Price (NS)", "Difference ", "Direction", "Liquidity"]])
-print("\nDifference es el ranking de candidatos para revertir su Direction")
+print(df_sorted[["Posición", "Spline Price", "Fair Price (NS)", "Difference ", "Momentum", "O.I.", "Liquidity"]])
+print("\nDifference measures the reverse strength for each momentum (negative less is long, positive more is short).")
 print("\nSPOT: AR$ {}".format(spot))
 # ================== PLOT ==================
 plt.figure()
@@ -136,7 +145,7 @@ colors = ["red" if m > 0 else "green" for m in df["Mispricing"]]
 plt.scatter(df["TTM (years)"], df["TEA (%)"], color=colors, zorder=3)
 
 # curva suavizada
-plt.plot(x_smooth, y_smooth_tea, color="yellow", zorder=2)
+plt.plot(x_smooth, y_smooth_tea, color="tab:orange", zorder=2)
 
 # etiquetas
 for _, row in df.iterrows():

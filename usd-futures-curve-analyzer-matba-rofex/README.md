@@ -64,12 +64,11 @@ Example file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA
 
 All contracts are aligned to market close (15:00):  
 ```
-TTM = (maturity - market_close) / 365
+TTM = Effective Trading Days / 252
 ```
-
 Where:  
-  - Market close is fixed at 15:00  
-  - Maturity is also normalized to 15:00  
+  - Calendar time is adjusted by removing weekends  
+  - Both report timestamps (close_date and maturity_date) are aligned to market close (15:00)  
 
 2\. TEA Calculation  
 ```
@@ -136,10 +135,12 @@ Directional signal:
 ```
 signal = spline_curve - nelson_siegel_curve
 ```
-
-Interpretation:  
-  - LONG → market above structural curve  
-  - SHORT → market below structural curve  
+  
+Signal is derived from the relative position between the market curve 
+(spline) and the structural curve (Nelson–Siegel).  
+  
+It reflects momentum or deviation from structural equilibrium, 
+not absolute mispricing.  
 
 ---
 
@@ -157,19 +158,26 @@ Interpretation:
 
 - TEA (%) vs TTM (years)  
 - Market scatter points (red/green by mispricing)  
-- Smoothed Nelson–Siegel curve (yellow)  
+- Smoothed Nelson–Siegel curve (orange)  
 - Contract annotations  
 
 ---
 
-## Author
-
-Carlos Maccarrone  
-Date: 2026-04-08
-
+## Methodoly  
+  
+The Nelson–Siegel curve is not intended to replicate market prices, 
+but to provide a stable structural benchmark.  
+  
+Mispricing is defined as the deviation between market-implied pricing 
+and this structural curve.  
+  
+Short-term contracts are highly sensitive to time-to-maturity estimation,
+making accurate time modeling critical for stable curve construction.  
+  
 ---
 
 ## Notes
+
 - Designed for **USD futures curve analysis in Argentina (MATBA-ROFEX)**.  
 - Combines:  
   - Market-driven interpolation (spline)  
@@ -179,3 +187,12 @@ Date: 2026-04-08
   - Curve arbitrage  
   - Term structure analysis  
 - Built as a **hybrid quantitative research tool** for FX futures pricing.
+
+---
+
+## Author
+
+Carlos Maccarrone  
+Date: 2026-04-08
+
+---
