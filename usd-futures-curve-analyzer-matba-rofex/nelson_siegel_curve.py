@@ -124,7 +124,7 @@ df["Liquidity"] = liq
 df_filtered = df.copy()
 # df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
 df_filtered["O.I."] = df_filtered["I. A.*"]
-df_filtered["Var.%"] = col = df.filter(like="Var.%")
+df_filtered["Var.%"] = df.filter(like="Var.%")
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
