@@ -14,26 +14,30 @@ It then compares both to detect mispricing, relative value opportunities, and li
 - Extracts and cleans futures data directly from Matba-Rofex Excel files.  
 - Automatically detects spot FX (Dólar UST ART 000).  
 - Calculates:  
-  - TTM (Time to Maturity) in years.  
+  - TTM (Time to Maturity, business days adjusted).  
   - TEA (Tasa Efectiva Anual).  
   - TEM (Tasa Efectiva Mensual).  
   - ΔTEM (curve slope dynamics).  
+  - TNA (Nominal Annual Rate approximation).  
 - Builds two independent curve models:  
   - **Weighted Univariate Spline (market curve)**  
   - **Nelson–Siegel model (structural term structure)**  
-- Computes:
-  - Fair value curve  
-  - Mispricing (NS)  
-  - LONG / SHORT based on relative mispricing  
-  - Ranking of candidates which could reverse direction  
+- Computes:  
+  - Fair value curve (Nelson–Siegel)  
+  - Mispricing (log-space)  
+  - Price Deviation (price-space)  
+  - LONG / SHORT signal  
+- Spread analysis:  
+  - Current spread between contracts  
+  - Previous spread comparison  
 - Liquidity modeling:  
   - Log-scaled volume  
   - Normalized liquidity score  
-  - Filtering of illiquid contracts  
+  - Ranking by liquidity (most tradable first)  
 - Visualization:  
-  - TEA vs TTM scatter plot.  
-  - Smoothed curve overlay.  
-  - Contract labeling with ticker and rates.  
+  - TEA vs TTM scatter plot  
+  - Nelson–Siegel curve (converted to TEA space)  
+  - Contract labeling with ticker and rates  
 
 ---
 
@@ -47,28 +51,31 @@ pip install pandas numpy matplotlib scipy openpyxl
 
 ## Usage
 
-Run the script and provide a Matba-Rofex Excel file: 
+Provide the required input files:  
+  - close.xlsx → market data from Matba-Rofex  
+  - holidays.xlsx → trading calendar (holidays)  
+
+Run the script:
 ```bash
-Ingrese nombre archivo con extension: close.xlsx
+python nelson_siegel_curve.py
 ```
 
-Example file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA3Mercados%E2%80%93Monedas10042026.xlsx
+Example market data file: https://www.rofex.com.ar/Herramientas/Descargas/New/CierreParcialA3Mercados%E2%80%93Monedas17042026.xlsx
 
-(Rename: CierreParcialA3Mercados%E2%80%93Monedas10042026.xlsx to close.xlsx)  
+(Rename: CierreParcialA3Mercados%E2%80%93Monedas17042026.xlsx to close.xlsx)  
 
 ---
 
 ## Methodology
 
 1\. Time to Maturity (TTM)  
-
-All contracts are aligned to market close (15:00):  
 ```
-TTM = Effective Trading Days / 252
+TTM = Business Days (excluding weekends + holidays) / 252
 ```
 Where:  
-  - Calendar time is adjusted by removing weekends  
-  - Both report timestamps (close_date and maturity_date) are aligned to market close (15:00)  
+  - Uses numpy.busday_count  
+  - Adjusted with external holiday calendar (holidays.xlsx)  
+  - Critical for short-term contract accuracy  
 
 2\. TEA Calculation  
 ```
@@ -88,7 +95,6 @@ y = log(Future / Spot)
 This produces a **liquidity-adjusted market curve**.
 
 4\. Nelson–Siegel Curve (Structural Model)  
-  
 The structural term structure is modeled as:  
 ```
 y(x) = β₀ + β₁ * ((1 - e^{-λx}) / λx) + β₂ * (((1 - e^{-λx}) / λx) - e^{-λx})
@@ -98,7 +104,7 @@ Optimized via nonlinear least squares:
   - Minimizes squared error vs observed log-prices  
   - Includes level shift adjustment for calibration  
 
-This provides a **smooth macro-consistent curve**.  
+This provides a **smooth structural benchmark curve**.  
 
 5\. Fair Value Construction  
 ```
@@ -108,15 +114,16 @@ Fair Price = Spot * exp(curve_value)
 Computed from Nelson–Siegel fitted curve.  
 
 6\. Mispricing & Difference  
-- Two sources of deviation:  
-  - Spline vs Nelson-Siegel  
-  - Market price vs theoretical curve  
-
-- Key metrics:  
-  - `Mispricing = log(F/S) - NS_curve`  
-  - `Difference = Spline Price - Fair Price`  
-
-- Used to detect **relative value opportunities**.
+Two complementary measures:  
+  - Mispricing (log-space) 
+```
+Mispricing = log(F/S) - NS_curve
+```
+  - Price Deviation (price-space)  
+```
+Price Deviation = Spline Price - Fair Price
+```
+Used to detect **relative value opportunities**.  
 
 7\. Liquidity Filter  
 
@@ -126,8 +133,8 @@ Liquidity = log(1 + Volume) normalized
 ```
 
 Then:  
-  - Contracts with low liquidity are filtered out  
-  - Ranking is done by liquidity strength  
+  - Used to rank contracts  
+  - Output sorted from most to least liquid  
 
 8\. Trading Signal  
   
@@ -148,11 +155,13 @@ not absolute mispricing.
 
 **Console Output**  
 - Full contract table:  
-  - TEA, TEM, ΔTEM, Mispricing  
+  - TEA, TEM, ΔTEM, TNA  
+  - Spread, Previous Spread  
 - Ranked liquidity view:  
-  - Fair Price  
-  - Direction (LONG / SHORT)  
-  - Candidates ranking which could reverse direction.  
+  - Mispricing  
+  - Price Deviation  
+  - Trend (LONG / SHORT)  
+  - Liquidity ranking  
 
 ## Visualization
 
