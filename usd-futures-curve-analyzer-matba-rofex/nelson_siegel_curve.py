@@ -19,6 +19,26 @@ def ttm_years(close, maturity, holiday_dates):
 def tea(price, spot, maturity, close, holiday_dates):
     ttm_y = ttm_years(close, maturity, holiday_dates)
     return (price / spot) ** (1 / ttm_y) - 1, ttm_y
+# ================= FORMAT FUNCTIONS =================
+def format_matba_contract(pos):
+    if not isinstance(pos, str) or len(pos) != 9:
+        return pos  # first guardrail
+
+    asset = pos[:3]
+    month = pos[3:5]
+    year = pos[-2:]
+
+    month_map = {
+        "01": "ENE", "02": "FEB", "03": "MAR",
+        "04": "ABR", "05": "MAY", "06": "JUN",
+        "07": "JUL", "08": "AGO", "09": "SEP",
+        "10": "OCT", "11": "NOV", "12": "DIC",
+    }
+
+    if month not in month_map:
+        return pos # second guardrail
+
+    return f"{asset}/{month_map[month]}{year}"    
 # ================== READ EXCEL ==================
 file_path = "close.xlsx"
 df = pd.read_excel(file_path, header=9)
@@ -94,7 +114,11 @@ def ns_model(theta, x):
 
 def loss(theta):
     y_pred = ns_model(theta, x_safe)
-    return np.sum((y - y_pred) ** 2)
+    w_base = np.sqrt(np.clip(x_safe, 0.05, 0.6))
+    w_mask = np.zeros(len(df))
+    w_mask[2:7] = 1
+    w = 0.7 * w_base + 0.3 * w_mask
+    return np.sum(w * (y - y_pred) ** 2)
 
 res = minimize(loss, x0=[0.02, -0.01, 0.01, 1.0])
 theta = res.x
@@ -121,11 +145,16 @@ liq = np.log1p(vol)
 liq = liq / liq.max()
 df["Liquidity"] = liq
 # ================== FILTER ==================
+df["Posición"] = df["Posición"].apply(format_matba_contract)
 df_filtered = df.copy()
 # df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
 df_filtered["O.I."] = df_filtered["I. A.*"]
 df_filtered["Var.%"] = df_filtered.filter(like="Var.%")
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
+
+df["Error_NS"] = df["Ajuste"] - df["Fair Price (NS)"]
+df["Rel_Error"] = df["Error_NS"] / df["Ajuste"]
+print(df[["Posición", "Rel_Error"]])
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
 print(df[["Posición", "Ajuste", "Spread", "PrevSpread", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "TNA (%)"]])
@@ -143,17 +172,40 @@ plt.scatter(df["TTM (years)"], df["TEA (%)"], color=colors, zorder=3)
 # curva suavizada
 plt.plot(x_smooth, y_smooth_tea, color="tab:orange", zorder=2)
 
+y_min = df["TEA (%)"].min()
+y_max = df["TEA (%)"].max()
+padding = (y_max - y_min) * 0.15
+plt.ylim(y_min - padding, y_max + padding)
+
 # etiquetas
 for _, row in df.iterrows():
     x_i = row["TTM (years)"]
     y_i = row["TEA (%)"]
     label = row["Posición"]
-    
+
     # arriba: contrato
-    plt.text(x_i, y_i + 0.2, label, ha='center', fontsize=9, fontweight="bold", color="black")
-    
-    # abajo: TEA formateada
-    plt.text(x_i + 0.004, y_i - 0.5, f"{y_i:.2f}%", ha='center', fontsize=9, fontweight="bold", color="black")
+    plt.annotate(
+        label,
+        (x_i, y_i),
+        textcoords="offset points",
+        xytext=(0, 7),
+        ha='center',
+        fontsize=9,
+        fontweight="bold",
+        color="black"
+    )
+
+    # abajo: TEA
+    plt.annotate(
+        f"{y_i:.2f}%",
+        (x_i, y_i),
+        textcoords="offset points",
+        xytext=(3, -14),
+        ha='center',
+        fontsize=9,
+        fontweight="bold",
+        color="black"
+    )
 
 plt.xlabel("Tiempo a vencimiento (años)")
 plt.ylabel("TEA (%)")
