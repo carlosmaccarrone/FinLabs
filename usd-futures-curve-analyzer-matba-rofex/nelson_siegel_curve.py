@@ -151,10 +151,6 @@ df_filtered = df.copy()
 df_filtered["O.I."] = df_filtered["I. A.*"]
 df_filtered["Var.%"] = df_filtered.filter(like="Var.%")
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
-
-df["Error_NS"] = df["Ajuste"] - df["Fair Price (NS)"]
-df["Rel_Error"] = df["Error_NS"] / df["Ajuste"]
-print(df[["Posición", "Rel_Error"]])
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
 print(df[["Posición", "Ajuste", "Spread", "PrevSpread", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "TNA (%)"]])
