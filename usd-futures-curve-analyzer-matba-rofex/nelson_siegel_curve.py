@@ -75,6 +75,7 @@ if spot is None:
 holidays_df = pd.read_excel("holidays.xlsx")
 holidays_df["Fecha"] = pd.to_datetime(holidays_df["Fecha"], dayfirst=True)
 holiday_dates = sorted(set(holidays_df["Fecha"].dt.date))
+df = df[df["Último Día Neg."] > close_date].copy()
 # ================== CALCULATE CURVE ==================
 ttm_list = []
 tea_list = []
