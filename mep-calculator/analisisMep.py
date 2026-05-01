@@ -1,12 +1,8 @@
-##### C:\Users\carlos.e.maccarrone\Desktop\Tareas Teco\portfolio\scripts
-
 import matplotlib.pyplot as plt
-from scipy.stats import zscore
 import pandas as pd
 import numpy as np
 
-df = pd.read_excel("dolarMep.xlsx")
-# print(df.head())
+df = pd.read_excel("analisisMep.xlsx")
 
 ################################
 al30 = df[df["SIMBOLO"] == "AL30"].copy()
@@ -16,96 +12,88 @@ al30.rename(columns={"PRECIO PROMEDIO":"PRECIO AL30", "VOLUMEN NOMINAL": "VOLUME
 al30d.rename(columns={"PRECIO PROMEDIO":"PRECIO AL30D", "VOLUMEN NOMINAL": "VOLUMEN AL30D", "MONTO NEGOCIADO": "MONTO AL30D"}, inplace=True)
 
 merged = pd.merge(al30[["FECHA", "PRECIO AL30", "VOLUMEN AL30", "MONTO AL30"]], al30d[["FECHA", "PRECIO AL30D", "VOLUMEN AL30D", "MONTO AL30D"]], on="FECHA")
+merged.columns = merged.columns.str.replace(" ", "_")
 
-merged["DOLAR MEP"] = merged["PRECIO AL30"] / merged["PRECIO AL30D"]
+merged["DOLAR_MEP"] = merged["PRECIO_AL30"] / merged["PRECIO_AL30D"]
 
 merged["FECHA"] = pd.to_datetime(merged["FECHA"])
 merged.sort_values("FECHA", inplace=True)
+merged.reset_index(drop=True, inplace=True)
 ################################
+## Un ZCORE_MEP < -1 podría indicar un MEP bajo respecto al promedio, con posibilidad de compra.
+## Si el volumen > promedio es una oportunidad de compra.
+span = 50
+merged["EWMA_MEAN"] = merged["DOLAR_MEP"].ewm(span=span, adjust=False).mean()
+merged["EWMA_STD"] = merged["DOLAR_MEP"].ewm(span=span, adjust=False).std()
 
-## Un ZCORE MEP < -1 podría ndicar un MEP bajo respecto al promedio, con posibilidad de compra.
-## Si el volumen > promedio es una oportunidad de comra.
-merged["ZSCORE MEP"] = zscore(merged["DOLAR MEP"])
+merged["ZSCORE_MEP"] = (merged["DOLAR_MEP"] - merged["EWMA_MEAN"]) / merged["EWMA_STD"]
 
-sweet_spots_compra = merged[merged["ZSCORE MEP"] < -1.0]
-sweet_spots_venta = merged[merged["ZSCORE MEP"] > 1.0]
-
-# print("Posibles oportunidades de COMPRA (MEP muy bajo):")
-# print(sweet_spots_compra[["FECHA", "DOLAR MEP", "ZSCORE MEP"]])
-
-# print("Posibles oportunidades de VENTA (MEP muy alto):")
-# print(sweet_spots_venta[["FECHA", "DOLAR MEP", "ZSCORE MEP"]])
-
+merged = merged.dropna(subset=["EWMA_MEAN", "EWMA_STD"]).copy()
 ################################
+merged["EWMA_VOL_AL30D"] = merged["VOLUMEN_AL30D"].ewm(span=span, adjust=False).mean()
 
-def clasificar_flujo(row):
-	mean = merged["VOLUMEN AL30D"].mean()
-	if row["ZSCORE MEP"] > 1 and row["VOLUMEN AL30D"] > mean:
-		return "Venta"
-	elif row["ZSCORE MEP"] < -1 and row["VOLUMEN AL30D"] > mean:
-		return "Compra"
-	else:
-		return None
+cond_venta = (merged["ZSCORE_MEP"] > 1) & (merged["VOLUMEN_AL30D"] > merged["EWMA_VOL_AL30D"])
+cond_compra = (merged["ZSCORE_MEP"] < -1) & (merged["VOLUMEN_AL30D"] > merged["EWMA_VOL_AL30D"])
 
-merged["FLUJO INFERIDO"] = merged.apply(clasificar_flujo, axis=1)
-
+merged["FLUJO_INFERIDO"] = np.where(cond_venta, "Venta",
+                           np.where(cond_compra, "Compra", None))
 ################################
 
 # 1 precio implícito calculado
-merged["PRECIO CALC AL30"] = merged["MONTO AL30"] / merged["VOLUMEN AL30"]
-merged["PRECIO CALC AL30D"] = merged["MONTO AL30D"] / merged["VOLUMEN AL30D"]
+merged["PRECIO_CALC_AL30"] = merged["MONTO_AL30"] / merged["VOLUMEN_AL30"]
+merged["PRECIO_CALC_AL30D"] = merged["MONTO_AL30D"] / merged["VOLUMEN_AL30D"]
 
 # 2 zcore del volumen en al30
-merged["ZVOL AL30"] = (merged["VOLUMEN AL30"] - merged["VOLUMEN AL30"].mean()) / merged["VOLUMEN AL30"].std()
+merged["EWMA_VOL_AL30"] = merged["VOLUMEN_AL30"].ewm(span=span, adjust=False).mean()
+merged["EWMA_STD_VOL_AL30"] = merged["VOLUMEN_AL30"].ewm(span=span, adjust=False).std()
+
+merged["ZVOL_AL30"] = (merged["VOLUMEN_AL30"] - merged["EWMA_VOL_AL30"]) / merged["EWMA_STD_VOL_AL30"]
 
 # 3 diferencia entre precios teóricos vs reales
-merged["DELTA PRECIO AL30"] = abs(merged["PRECIO CALC AL30"] - merged["PRECIO AL30"])
+merged["DELTA_PRECIO_AL30"] = np.abs(merged["PRECIO_CALC_AL30"] - merged["PRECIO_AL30"])
 
 # 4 dias con posible intervención (marcamos como True si se cumple alguna combinación)
-merged["INTERVENIDO"] = ((merged["ZVOL AL30"] > 1.0) & (merged["DELTA PRECIO AL30"] < 0.5)) # tolerancia de precios
+merged["INTERVENIDO"] = ((merged["ZVOL_AL30"] > 1.0) & (merged["DELTA_PRECIO_AL30"] < 0.5)) # tolerancia de precios
 
 ################################
-
 window = 50
 subset = merged.tail(window)
 
-sweet_spots_compra_subset = sweet_spots_compra[sweet_spots_compra["FECHA"].isin(subset["FECHA"])]
-sweet_spots_venta_subset = sweet_spots_venta[sweet_spots_venta["FECHA"].isin(subset["FECHA"])]
+subset_compra = subset[subset["ZSCORE_MEP"] < -1.0]
+subset_venta = subset[subset["ZSCORE_MEP"] > 1.0]
 
 fig, ax1 = plt.subplots(figsize=(12, 6))
 
 # Eje principal: MEP y sus zcores
-ax1.plot(subset["FECHA"], subset["DOLAR MEP"], label="MEP", color="blue", marker="o")
-media = subset["DOLAR MEP"].mean()
-std = subset["DOLAR MEP"].std()
+ax1.plot(subset["FECHA"], subset["DOLAR_MEP"], label="MEP", color="orange", marker="o")
 
 # Líneas de +-1o
-ax1.axhline(media + std, color="red", linestyle="--", label="+1o")
-ax1.axhline(media - std, color="red", linestyle="--", label="-1o")
-ax1.axhline(media, color="gray", linestyle="--", label="Media")
+ax1.plot(subset["FECHA"], subset["EWMA_MEAN"], linestyle="--", color="gray", label="Media EWMA")
+ax1.plot(subset["FECHA"], subset["EWMA_MEAN"] + subset["EWMA_STD"], linestyle="--", color="darkred", label="+1σ")
+ax1.plot(subset["FECHA"], subset["EWMA_MEAN"] - subset["EWMA_STD"], linestyle="--", color="darkred", label="-1σ")
 
 # Puntos de sweet spots
-ax1.scatter(sweet_spots_compra_subset["FECHA"], sweet_spots_compra_subset["DOLAR MEP"], color="red", label="Sweet Spot Compra", zorder=5)
-ax1.scatter(sweet_spots_venta_subset["FECHA"], sweet_spots_venta_subset["DOLAR MEP"], color="red", label="Sweet Spot Venta", zorder=5)
+ax1.scatter(subset_compra["FECHA"], subset_compra["DOLAR_MEP"], color="green", label="Sweet Spot Compra", zorder=5)
+ax1.scatter(subset_venta["FECHA"], subset_venta["DOLAR_MEP"], color="red", label="Sweet Spot Venta", zorder=5)
 
 ax1.set_ylabel("Dólar MEP")
 ax1.set_xlabel("Fecha")
-ax1.tick_params(axis="y", labelcolor="blue")
+ax1.tick_params(axis="y", labelcolor="orange")
 ax1.grid(True)
 
 # Eje secundario: Volumen AL30D fondo gris
 ax2 = ax1.twinx()
-ax2.bar(subset["FECHA"], subset["VOLUMEN AL30D"], alpha=0.2, color="gray", label="Volumen AL30D")
+ax2.bar(subset["FECHA"], subset["VOLUMEN_AL30D"], alpha=0.2, color="gray", label="Volumen AL30D")
 ax2.set_ylabel("Volumen AL30D")
 ax2.tick_params(axis="y", labelcolor="gray")
 
-for _, row in subset.iterrows():
-	if row["FLUJO INFERIDO"] == "Venta":
-		ax2.annotate("v", xy=(row["FECHA"], row["VOLUMEN AL30D"]), color="black", ha="center")
-	elif row["FLUJO INFERIDO"] == "Compra":
-		ax2.annotate("c", xy=(row["FECHA"], row["VOLUMEN AL30D"]), color="black", ha="center")
+for row in subset.itertuples():
+    if row.FLUJO_INFERIDO == "Venta":
+        ax2.annotate("v", xy=(row.FECHA, row.VOLUMEN_AL30D), color="black", ha="center")
+    elif row.FLUJO_INFERIDO == "Compra":
+        ax2.annotate("c", xy=(row.FECHA, row.VOLUMEN_AL30D), color="black", ha="center")
 
-for fecha in subset[subset["INTERVENIDO"] == True]["FECHA"]:
+for fecha in subset[subset["INTERVENIDO"]]["FECHA"]:
 	ax1.axvspan(fecha - pd.Timedelta(days=0.5), fecha + pd.Timedelta(days=0.5), color='yellow', alpha=0.3)
 
 # Título y leyenda
@@ -115,10 +103,3 @@ fig.legend(loc="upper left", bbox_to_anchor=(0.12, 0.88))
 plt.show()
 
 ################################
-
-
-
-
-
-
-
