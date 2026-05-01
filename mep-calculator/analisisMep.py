@@ -12,7 +12,7 @@ al30.rename(columns={"PRECIO PROMEDIO":"PRECIO AL30", "VOLUMEN NOMINAL": "VOLUME
 al30d.rename(columns={"PRECIO PROMEDIO":"PRECIO AL30D", "VOLUMEN NOMINAL": "VOLUMEN AL30D", "MONTO NEGOCIADO": "MONTO AL30D"}, inplace=True)
 
 merged = pd.merge(al30[["FECHA", "PRECIO AL30", "VOLUMEN AL30", "MONTO AL30"]], al30d[["FECHA", "PRECIO AL30D", "VOLUMEN AL30D", "MONTO AL30D"]], on="FECHA")
-merged.columns = merged.columns.str.replace(" ", "_")
+merged.columns = merged.columns.str.replace(" ", "_", regex=False)
 
 merged["DOLAR_MEP"] = merged["PRECIO_AL30"] / merged["PRECIO_AL30D"]
 
