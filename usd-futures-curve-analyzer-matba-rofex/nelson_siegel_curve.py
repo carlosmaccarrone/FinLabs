@@ -92,7 +92,6 @@ for _, row in df.iterrows():
 df["TTM (years)"] = ttm_list
 df["TEA (%)"] = tea_list
 df["TEM (%)"] = ((1 + df["TEA (%)"]/100) ** (1/12) - 1) * 100
-df["ΔTEM"] = df["TEM (%)"].diff()
 df["Vol."] = pd.to_numeric(df["Vol."], errors="coerce").fillna(0)
 x = df["TTM (years)"].values
 x_safe = np.where(x == 0, 1e-6, x) # guardrail
@@ -132,6 +131,7 @@ y_smooth_tea = (np.exp(y_smooth) ** (1 / x_smooth) - 1) * 100
 # ================== EDGE ==================
 df["Fair Price (NS)"] = spot * np.exp(y_ns)
 df["Price Deviation"] = df["Spline Price"] - df["Fair Price (NS)"]
+df["Deviation"] = (df["Price Deviation"] / 0.5).round(1)
 df["Mispricing"] = y - y_ns
 df["Status"] = np.where(df["Mispricing"] > 0, "CARO", "BARATO")
 signal = y_spline - y_ns
@@ -140,6 +140,12 @@ df["Simple Return"] = (df["Ajuste"] / spot - 1)
 df["TNA (%)"] = (df["Simple Return"] / x_safe) * 100
 df["Spread"] = pd.to_numeric(df["Ajuste"].diff(), errors="coerce").fillna(0)
 df["PrevSpread"] = pd.to_numeric(df["Aj. Ant."].diff(), errors="coerce").fillna(0)
+total_vol = df["Vol."].sum()
+df["Vol_Share"] = df["Vol."] / total_vol
+df["Vol.%"] = (df["Vol_Share"] * 100).round(2)
+df["TTM (days)"] = (df["TTM (years)"] * 252).round()
+df["TTM (days)"] = df["TTM (days)"].astype("Int64")
+df["Var.%"] = df.filter(like="Var.%")
 # ================== LIQUIDITY ==================
 vol = df["Vol."].values
 liq = np.log1p(vol)
@@ -150,13 +156,18 @@ df["Posición"] = df["Posición"].apply(format_matba_contract)
 df_filtered = df.copy()
 # df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
 df_filtered["O.I."] = df_filtered["I. A.*"]
-df_filtered["Var.%"] = df_filtered.filter(like="Var.%")
 df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===\n")
-print(df[["Posición", "Ajuste", "Spread", "PrevSpread", "TTM (years)", "TEA (%)", "TEM (%)", "ΔTEM", "TNA (%)"]])
+print(df.assign(**{
+        "TEA %": df["TEA (%)"].round(2),
+        "TEM %": df["TEM (%)"].round(3),
+        "TNA %": df["TNA (%)"].round(2)
+    })[["Posición", "Var.%", "Ajuste", "Spread", "PrevSpread", "TTM (days)", "TEA %", "TEM %", "TNA %"]])
 print("\n=== FROM MORE LIQUIDS TO LESS LIQUIDS ===")
-print(df_sorted[["Posición", "Var.%", "Mispricing", "Price Deviation", "Trend", "Status", "O.I.", "Liquidity"]])
+print(df_sorted.assign(**{
+        "Mispricing %": (df_sorted["Mispricing"] * 100).round(3)
+    })[["Posición", "Mispricing %", "Deviation", "Trend", "Status", "O.I.", "Vol.%", "Liquidity"]])
 print("\nSPOT: AR$ {}".format(spot))
 print("Timestamp: {}".format(close_date.date().strftime("%d/%m/%Y")))
 # ================== PLOT ==================
