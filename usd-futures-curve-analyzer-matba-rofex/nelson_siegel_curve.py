@@ -96,13 +96,15 @@ df["Vol."] = pd.to_numeric(df["Vol."], errors="coerce").fillna(0)
 x = df["TTM (years)"].values
 x_safe = np.where(x == 0, 1e-6, x) # guardrail
 y = np.log(df["Ajuste"].values / spot)
-# ================== SPLINE (market curve) ==================
-weights = np.sqrt(df["Vol."].values)
-weights = weights / np.mean(weights)
-weights = np.clip(weights, 0.6, 1.5)
-spline = UnivariateSpline(x_safe, y, w=weights, s=0.0001)
-y_spline = spline(x_safe)
-df["Spline Price"] = spot * np.exp(y_spline)
+# ================== PHANTOM FRONT NODE ==================
+x_first = x_safe[0]
+y_first = y[0]
+
+phantom_x = x_first * 0.5
+phantom_y = y_first * 0.25
+
+x_ns = np.insert(x_safe, 0, phantom_x)
+y_ns_input = np.insert(y, 0, phantom_y)
 # ================== NELSON-SIEGEL (structural curve) ==================
 def ns_model(theta, x):
     beta0, beta1, beta2, lam = theta
@@ -113,18 +115,19 @@ def ns_model(theta, x):
     return beta0 + beta1 * term1 + beta2 * term2
 
 def loss(theta):
-    y_pred = ns_model(theta, x_safe)
-    w_base = np.sqrt(np.clip(x_safe, 0.05, 0.6))
-    w_mask = np.zeros(len(df))
-    w_mask[2:7] = 1
+    y_pred = ns_model(theta, x_ns)
+    w_base = np.sqrt(np.clip(x_ns, 0.05, 0.6))
+    w_mask = np.zeros_like(x_ns)
+    w_mask[3:8] = 1
     w = 0.7 * w_base + 0.3 * w_mask
-    return np.sum(w * (y - y_pred) ** 2)
+    return np.sum(w * (y_ns_input - y_pred) ** 2)
 
-res = minimize(loss, x0=[0.02, -0.01, 0.01, 1.0])
+# res = minimize(loss, x0=[0.02, -0.01, 0.01, 1.0])
+res = minimize(loss, x0=[0.02, -0.01, 0.02, 1.77])
 theta = res.x
 y_ns = ns_model(theta, x_safe)
 # curva lisa
-x_smooth = np.linspace(x_safe.min(), x_safe.max(), 100)
+x_smooth = np.linspace(1e-6, x_safe.max(), 100)
 y_smooth = ns_model(theta, x_smooth)
 # ================== BACK TO TEA ==================
 y_smooth_tea = (np.exp(y_smooth) ** (1 / x_smooth) - 1) * 100
@@ -132,7 +135,6 @@ y_smooth_tea = (np.exp(y_smooth) ** (1 / x_smooth) - 1) * 100
 df["Fair Price (NS)"] = spot * np.exp(y_ns)
 df["Mispricing"] = y - y_ns
 df["Status"] = np.where(df["Mispricing"] > 0, "CARO", "BARATO")
-df["Twist"] = np.where(np.sign(y_spline - y_ns) > 0, "STEEPENING", "FLATTENING")
 df["Simple Return"] = (df["Ajuste"] / spot - 1)
 df["TNA (%)"] = (df["Simple Return"] / x_safe) * 100
 adj = pd.to_numeric(df["Ajuste"], errors="coerce")
@@ -149,6 +151,7 @@ df["Vol.%"] = (df["Vol_Share"] * 100).round(2)
 df["TTM (days)"] = (df["TTM (years)"] * 252).round()
 df["TTM"] = df["TTM (days)"].astype("Int64")
 df["Var.%"] = df.filter(like="Var.%").iloc[:, 0]
+df["O.I."] = df["I. A.*"]
 # ================== LIQUIDITY ==================
 vol = df["Vol."].values
 liq = np.log1p(vol)
@@ -157,9 +160,8 @@ df["Liquidity"] = liq
 # ================== FILTER ==================
 df["Posición"] = df["Posición"].apply(format_matba_contract)
 df_calculations = df.copy()
-df_calculations["O.I."] = df_calculations["I. A.*"]
 df_calculations["Rank"] = df_calculations["Liquidity"].rank(ascending=False).astype(int)
-# df_sorted = df_calculations.sort_values("Liquidity", ascending=False)
+df_sorted = df_calculations.sort_values("Rank", ascending=True)
 # ================== OUTPUT ==================
 print("\n=== RESULTS ===")
 print(df.assign(**{
@@ -170,11 +172,11 @@ print(df.assign(**{
         "TEM %": df["TEM (%)"].round(3),
         "TEA %": df["TEA (%)"].round(2),
         "TNA %": df["TNA (%)"].round(2)        
-    })[["Posición", "Var.%", "Aj", "Spread", "SpdDff", "PvAj", "PvSpd", "PvSpdDff", "TTM", "TEM %", "TEA %","TNA %"]])
-print("\n")
-print(df_calculations.assign(**{
-        "Misprice": (df_calculations["Mispricing"] * 10000).round(2),
-    })[["Posición", "Misprice", "Status", "Twist", "O.I.", "Vol.", "Vol.%", "Rank"]])
+    })[["Posición", "Var.%", "Aj", "Spread", "SpdDff", "PvAj", "PvSpd", "PvSpdDff", "TTM", "O.I.", "TEM %", "TEA %","TNA %"]])
+print("\n=== CLOSING RANKING ===")
+print(df_sorted.assign(**{
+        "Misprice": (df_sorted["Mispricing"] * 10000).round(2),
+    })[["Posición", "Misprice", "Status", "Vol.", "Vol.%", "Rank"]])
 print("\nSPOT: AR$ {}".format(spot))
 print("Timestamp: {}".format(close_date.date().strftime("%d/%m/%Y")))
 # ================== PLOT ==================
@@ -192,8 +194,6 @@ y_max = df["TEA (%)"].max()
 padding = (y_max - y_min) * 0.15
 plt.ylim(y_min - padding, y_max + padding)
 
-y_band = y_max + padding * 0.9
-
 # etiquetas
 for _, row in df.iterrows():
     x_i = row["TTM (years)"]
@@ -201,28 +201,6 @@ for _, row in df.iterrows():
     label = row["Posición"]
 
     y_model = np.interp(x_i, x_smooth, y_smooth_tea)
-
-    # línea gris de mispricing
-    plt.plot(
-        [x_i, x_i],
-        [y_i, y_model],
-        color="gray",
-        linewidth=1,
-        alpha=0.5
-    )
-
-    # valor del mispricing
-    mis = row["Mispricing"] * 10000
-    plt.annotate(
-        f"{mis:.2f}",
-        (x_i, y_band),
-        textcoords="offset points",
-        xytext=(0, 0),
-        ha="center",
-        fontsize=8,
-        color="gray",
-        alpha=0.9
-    )
 
     # arriba: contrato
     plt.annotate(

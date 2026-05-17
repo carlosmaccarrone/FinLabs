@@ -1,11 +1,12 @@
-# USD Futures Curve Analyzer (Spline + Nelson-Siegel Hybrid Model)
+# USD Futures Curve Analyzer (Nelson–Siegel with Front-End Stabilization)
 
-This Python script builds and analyzes the USD futures curve using MATBA-ROFEX contract data and spot FX, combining two complementary curve-fitting approaches:
+This project builds and analyzes the USD futures curve using market data from MATBA-ROFEX, using a single structural framework based on a calibrated Nelson–Siegel model with front-end stabilization.  
 
-A weighted spline (market-driven curve)
-A Nelson–Siegel model (structural curve)
-
-The model compares both structures to detect relative value distortions, curve shape dynamics, and liquidity-sensitive anomalies in the FX futures term structure.  
+- The model focuses on:  
+  - Term structure estimation  
+  - Relative-value mispricing  
+  - Liquidity-aware weighting  
+  - Curve shape diagnostics   
 
 ---
 
@@ -23,12 +24,10 @@ The model compares both structures to detect relative value distortions, curve s
   - Spread acceleration / deceleration (`SpdDff`).  
   - Previous session spread comparison (`PvSpd`).  
 - Curve modeling:    
-  - **Weighted Univariate Spline (market curve)**  
   - **Nelson–Siegel model (structural model)**  
 - Relative value analytics:   
   - Fair value estimation.  
   - Log-space mispricing detection.  
-  - Curve twist classification `STEEPENING/FLATTENING`.  
 - Liquidity analytics:    
   - Log-normalized liquidity score.  
   - Volume participation (Vol.%).  
@@ -36,8 +35,6 @@ The model compares both structures to detect relative value distortions, curve s
 - Visualization:  
   - TEA vs TTM term structure plot.  
   - Nelson–Siegel smoothed curve.  
-  - Relative-value deviation lines.  
-  - Mispricing labels (basis points).
   - Contract annotations.    
 
 ---
@@ -84,39 +81,38 @@ TEA = (Future Price / Spot)^(1 / TTM) - 1
 ```
 Represents the implied annualized rate embedded in each futures contract.  
 
-3\. Weighted Spline Curve (Market Curve)  
-- Observed futures prices are transformed into log-space:  
+3\. Nelson–Siegel Curve (Structural Model)  
+The model is calibrated on log-price space:  
 ```
-y = log(Future / Spot)
+y = log(F / Spot)
 ```
-- Weighted smoothing spline:  
-  - Weights = sqrt(Volume)  
-  - Clipped to reduce outliers impact  
 
-This produces a **liquidity-adjusted market curve**.  
-
-4\. Nelson–Siegel Curve (Structural Model)  
 The structural term structure is modeled as:  
+
 ```
 y(x) = β₀ + β₁ * ((1 - e^{-λx}) / λx) + β₂ * (((1 - e^{-λx}) / λx) - e^{-λx})
 ```
 
-Optimized via nonlinear least squares:  
-  - Minimizes squared error vs observed log-prices  
-  - Includes level shift adjustment for calibration  
+Optimization is performed on a weighted least-squares objective over log-price space, including a synthetic front-end anchor.  
 
 This provides a **smooth structural benchmark curve**.  
+
+4\. Front-end stabilization (phantom node)  
+
+A synthetic observation is injected at the front end of the curve:  
+  - Improves calibration stability for short maturities  
+  - Reduces sensitivity to sparse front contracts  
+  - Acts as a numerical anchor for the Nelson–Siegel fit  
 
 5\. Fair Value Construction  
 ```
 Fair Price = Spot * exp(curve_value)
 ```
 
-Computed from Nelson–Siegel fitted curve.  
+Computed by transforming the fitted Nelson–Siegel log-curve back into price space.  
 
-6\. Mispricing & Difference  
-Two complementary measures:  
-  - Mispricing (log-space) 
+6\. Mispricing (log-space)  
+
 ```
 Mispricing = log(F/S) - NS_curve
 ```
@@ -125,16 +121,8 @@ Mispricing = log(F/S) - NS_curve
   - Negative → cheaper-than-structural pricing  
 
 This allows detection of **relative-value distortions** across the curve.  
-  
-7\. Curve Twist Classification  
-
-The relative position between the market spline and the Nelson–Siegel curve is used to classify curve shape dynamics:  
-  - `STEEPENING`  
-  - `FLATTENING`  
-
-This is not intended as a directional trading signal, but rather as a term-structure diagnostic.  
-
-8\. Spread Structure Analysis  
+ 
+7\. Spread Structure Analysis  
 
 The model computes:  
   - Incremental contract spreads  
@@ -144,7 +132,7 @@ The model computes:
 
 This helps visualize local steepening/flattening pressure along the futures strip.  
 
-9\. Liquidity Modeling  
+8\. Liquidity Modeling  
 
 Liquidity is modeled as: 
 ```
@@ -169,8 +157,7 @@ Used for:
   - Spread differentials  
   - Time-to-maturity  
 - Relative Value Table:  
-  - Mispricing (bps)  
-  - Curve twist classification  
+  - Mispricing (basis points equivalent aka bps)   
   - Open interest  
   - Volume participation  
   - Liquidity rank  
@@ -181,8 +168,6 @@ The generated chart includes:
   - TEA (%) vs TTM (years)  
   - Market observations  
   - Nelson–Siegel structural curve  
-  - Relative-value deviation lines  
-  - Mispricing labels in basis points  
   - Contract annotations  
 
 ---
