@@ -1,6 +1,5 @@
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import minimize
-from datetime import datetime, time
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -66,6 +65,7 @@ spot = None
 for i in range(27, 47):
     if str(df_raw.iloc[i, 0]).strip() == "Dólar UST ART 000":
         spot = parse_number(df_raw.iloc[i, 2])
+        prev_spot = parse_number(df_raw.iloc[i, 4])
         close_date = pd.to_datetime(df_raw.iloc[i, 1], dayfirst=True)
         break
 
@@ -130,22 +130,25 @@ y_smooth = ns_model(theta, x_smooth)
 y_smooth_tea = (np.exp(y_smooth) ** (1 / x_smooth) - 1) * 100
 # ================== EDGE ==================
 df["Fair Price (NS)"] = spot * np.exp(y_ns)
-df["Price Deviation"] = df["Spline Price"] - df["Fair Price (NS)"]
-df["Deviation"] = (df["Price Deviation"] / 0.5).round(1)
 df["Mispricing"] = y - y_ns
 df["Status"] = np.where(df["Mispricing"] > 0, "CARO", "BARATO")
-signal = y_spline - y_ns
-df["Trend"] = np.where(signal > 0, "LONG", "SHORT")
+df["Twist"] = np.where(np.sign(y_spline - y_ns) > 0, "STEEPENING", "FLATTENING")
 df["Simple Return"] = (df["Ajuste"] / spot - 1)
 df["TNA (%)"] = (df["Simple Return"] / x_safe) * 100
-df["Spread"] = pd.to_numeric(df["Ajuste"].diff(), errors="coerce").fillna(0)
-df["PrevSpread"] = pd.to_numeric(df["Aj. Ant."].diff(), errors="coerce").fillna(0)
+adj = pd.to_numeric(df["Ajuste"], errors="coerce")
+spreads = adj.diff().fillna(0)
+spreads.iloc[0] = adj.iloc[0] - spot
+df["Spread"] = spreads
+prev_adj  = pd.to_numeric(df["Aj. Ant."], errors="coerce")
+prev_spreads = prev_adj.diff().fillna(0)
+prev_spreads.iloc[0] = prev_adj.iloc[0] - prev_spot
+df["PvSpd"] = prev_spreads
 total_vol = df["Vol."].sum()
 df["Vol_Share"] = df["Vol."] / total_vol
 df["Vol.%"] = (df["Vol_Share"] * 100).round(2)
 df["TTM (days)"] = (df["TTM (years)"] * 252).round()
-df["TTM (days)"] = df["TTM (days)"].astype("Int64")
-df["Var.%"] = df.filter(like="Var.%")
+df["TTM"] = df["TTM (days)"].astype("Int64")
+df["Var.%"] = df.filter(like="Var.%").iloc[:, 0]
 # ================== LIQUIDITY ==================
 vol = df["Vol."].values
 liq = np.log1p(vol)
@@ -153,21 +156,25 @@ liq = liq / liq.max()
 df["Liquidity"] = liq
 # ================== FILTER ==================
 df["Posición"] = df["Posición"].apply(format_matba_contract)
-df_filtered = df.copy()
-# df_filtered = df_filtered[df_filtered["Liquidity"] > 0.2]
-df_filtered["O.I."] = df_filtered["I. A.*"]
-df_sorted = df_filtered.sort_values("Liquidity", ascending=False)
+df_calculations = df.copy()
+df_calculations["O.I."] = df_calculations["I. A.*"]
+df_calculations["Rank"] = df_calculations["Liquidity"].rank(ascending=False).astype(int)
+# df_sorted = df_calculations.sort_values("Liquidity", ascending=False)
 # ================== OUTPUT ==================
-print("\n=== RESULTS ===\n")
+print("\n=== RESULTS ===")
 print(df.assign(**{
-        "TEA %": df["TEA (%)"].round(2),
+        "Aj": df["Ajuste"],
+        "SpdDff": pd.to_numeric(df["Spread"].diff(), errors="coerce"),
+        "PvAj": pd.to_numeric(df["Aj. Ant."], errors="coerce"),
+        "PvSpdDff": pd.to_numeric(df["PvSpd"].diff(), errors="coerce"),
         "TEM %": df["TEM (%)"].round(3),
-        "TNA %": df["TNA (%)"].round(2)
-    })[["Posición", "Var.%", "Ajuste", "Spread", "PrevSpread", "TTM (days)", "TEA %", "TEM %", "TNA %"]])
-print("\n=== FROM MORE LIQUIDS TO LESS LIQUIDS ===")
-print(df_sorted.assign(**{
-        "Mispricing %": (df_sorted["Mispricing"] * 100).round(3)
-    })[["Posición", "Mispricing %", "Deviation", "Trend", "Status", "O.I.", "Vol.%", "Liquidity"]])
+        "TEA %": df["TEA (%)"].round(2),
+        "TNA %": df["TNA (%)"].round(2)        
+    })[["Posición", "Var.%", "Aj", "Spread", "SpdDff", "PvAj", "PvSpd", "PvSpdDff", "TTM", "TEM %", "TEA %","TNA %"]])
+print("\n")
+print(df_calculations.assign(**{
+        "Misprice": (df_calculations["Mispricing"] * 10000).round(2),
+    })[["Posición", "Misprice", "Status", "Twist", "O.I.", "Vol.", "Vol.%", "Rank"]])
 print("\nSPOT: AR$ {}".format(spot))
 print("Timestamp: {}".format(close_date.date().strftime("%d/%m/%Y")))
 # ================== PLOT ==================
@@ -185,11 +192,37 @@ y_max = df["TEA (%)"].max()
 padding = (y_max - y_min) * 0.15
 plt.ylim(y_min - padding, y_max + padding)
 
+y_band = y_max + padding * 0.9
+
 # etiquetas
 for _, row in df.iterrows():
     x_i = row["TTM (years)"]
     y_i = row["TEA (%)"]
     label = row["Posición"]
+
+    y_model = np.interp(x_i, x_smooth, y_smooth_tea)
+
+    # línea gris de mispricing
+    plt.plot(
+        [x_i, x_i],
+        [y_i, y_model],
+        color="gray",
+        linewidth=1,
+        alpha=0.5
+    )
+
+    # valor del mispricing
+    mis = row["Mispricing"] * 10000
+    plt.annotate(
+        f"{mis:.2f}",
+        (x_i, y_band),
+        textcoords="offset points",
+        xytext=(0, 0),
+        ha="center",
+        fontsize=8,
+        color="gray",
+        alpha=0.9
+    )
 
     # arriba: contrato
     plt.annotate(
